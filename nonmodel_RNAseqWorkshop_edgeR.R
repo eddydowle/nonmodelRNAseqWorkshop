@@ -8,6 +8,8 @@
 
 #this is meant to be an introduction to differential expression. Dont get caught up in the R code. If you dont understand the code just run it put a comment above it to note it and try to focus on the point of what we are doing rather than the code itself. We wont have time this afternoon to go through the in's and out's of the code itself, so please focus on the broader picture. You can come back later on in your own time and work through any code bits that trouble you (google is your best friend for this). 
 
+#disclaimer: this is not a comprehensive differential expression analysis that you can push your data through. This is just an introduction. You are expected to read the manuals and go through the examples there yourself. I have cut some big corners in this code, simply to save time for this practical season - it is therefore not suitable to be used in a black box manner (and you should not do your statistical analysis in a black box manner ~ regardless of what you are doing). 
+
 #to install bioconductor packages:
 #if (!requireNamespace("BiocManager", quietly = TRUE))
 #  install.packages("BiocManager")
@@ -25,8 +27,11 @@ setwd("~/Documents/AdminStuff/Otago/Teaching/RNAseq/data/")
 ##########################
 #getting your data into R#
 ##########################
+#draw on board final table aim
 
 #we are going to start of looking at gene level counts so lets have a look at these counts. These are to the gene using RSEM which is a older program (you probably will likely use something newer like featurecounts or salmon) 
+
+#explain data
 
 #each samples file looks like:
 #gene_id	transcript_id(s)	length	effective_length	expected_count	TPM	FPKM
@@ -38,27 +43,33 @@ setwd("~/Documents/AdminStuff/Otago/Teaching/RNAseq/data/")
 
 #because we are doing differential expression analysis remember we are after the counts not TPM or FPKM
 
+#we want to build a table that looks like gene_id, counts for sampleA, counts for smapleB ..... 
+
 #there is a few ways to get your data into R
 #im going to show you three ways as getting data in often seems to be an issue
 
 #you can also just do this yourself by looping through the files:
 file_list<-list.files(pattern='*genes.results')
 file_list
-table<-c()
+#have a look at one of those files
+tmp <- read.table(file_list[1], header =TRUE)
+head(tmp)
 
+#create empty table
+table<-c()
+library(stringr)
 for (file in file_list){
-  sampleID<-str_match(file,"(^[A-Za-z0-9]*_[A-Za-z0-9]*_[A-Za-z0-9]*_[0-9]*)")[,1]
+  sampleID<-str_match(file,"(^[A-Za-z0-9]*_[A-Za-z0-9]*_[A-Za-z0-9]*_[0-9]*)")[,1] #grab sample name
   print(sampleID)
-  df<-read.table(file,header=T,sep="\t",row.names=NULL,stringsAsFactors = F)
-  df2<-df[,c(1,5)]
-  colnames(df2)[colnames(df2)=="expected_count"] <- paste(sampleID,sep="")
-  if (length(table) ==0){table<-df2
+  df<-read.table(file,header=T,sep="\t",row.names=NULL,stringsAsFactors = F) #bring in file at a time
+  df2<-df[,c(1,5)] #get columns we want
+  colnames(df2)[colnames(df2)=="expected_count"] <- paste(sampleID,sep="") #paste sample name into column name
+  if (length(table) ==0){table<-df2 
   } else {
-    table<-merge(table,df2,by="gene_id") }
+    table<-merge(table,df2,by="gene_id") } #merge samples together
 }  
 
 head(table)
-head(txi$counts)
 
 #another easy way tximport
 #I mentioned this package earlier as a way to move from transcript differential expression to gene level transcript differential expression
@@ -66,7 +77,6 @@ head(txi$counts)
 #BiocManager::install("tximport")
 
 library(tximport)
-library(stringr)
 file_list<-list.files(pattern='*genes.results')
 file_list
 #lets have a look at one of those files
@@ -79,10 +89,10 @@ names(file_list) <- sampleID
 #importing using tximport here we specify the program we used to generate the counts (in this case rsem) but tximport can deal with salmon/kallisto and others
 ?tximport
 txi<-tximport(file_list, type='rsem')
-summary(txi)
+summary(txi) #creates a list
 head(txi$counts)
 
-#another option is to use trinity's abundance_estiamtes_to_matrix perl script
+#another option is to use trinity's abundance_estimates_to_matrix perl script
 #its a perl script so we are just going to run it and it will output a couple of files to our working directory
 x <- 'perl abundance_estimates_to_matrix.pl'
 system(x)
@@ -105,18 +115,21 @@ head(txi$counts)
 #library(Rsubread)
 #?featureCounts
 
+#if you have a pairwise comparison (e.g. treatment control) there is a package called bigPint https://lindsayrutter.github.io/bigPint which has some pretty cool functions for checking your data and graphing later on. Its less useful for time series stuff but still worth looking at. 
+
 ######################################
 #annotations direct to genome example#
 ######################################
 
 #our annotation file is going to depend on whether we have a genome or transcriptome and how we annotated.
-#today we are going to look at some tephridid fly data becaue it is a fly our annotations are going to be back to drosophila our closest model species
+#today we are going to look at some fly data becaue it is a fly our annotations are going to be back to drosophila our closest model species
 
 #lets have a look at it
 pom_annotation<-read.table('fly_annotation.txt',header=T,row.names=NULL,sep='\t',stringsAsFactors = F)
 #this file is generated a protein blast between our flies genes and drosophila
 head(pom_annotation)
-#if we go look at flybase.org what we actually want is flybase gene ids
+#if we go look at flybase.org what we actually want is flybase gene ids (note that I have already converted out species protein codes to gene codes here to save time)
+#remember we always blast to the protein database so you always end up with protein rather gene codes
 #there is a handy package we can use to convert between FBpp (proteins) to FBgn (gene names)
 #you can use the library biomart to get the gene names
 #but this is quite slow so we wont actually run the fetch part
@@ -147,6 +160,7 @@ head(annotations_with_Dm)
 
 flybase_gn<-read.table('fbgn_fbtr_fbpp_fb_2016_05.tsv',header=T,row.names=NULL,sep='\t',stringsAsFactors = F)
 head(flybase_gn)
+flybase_gn$FlyBase_FBtr<-NULL
 
 #the other one we are going to bring in is the common name annotation file, which I have striped down slightly but it gives the common name
 flybase_cn<-read.table('fbgn_annotation_ID.tsv',header=T,row.names=NULL,sep='\t',quote='',stringsAsFactors = F)
@@ -163,7 +177,7 @@ head(pom_annotation_full)
 ###############################
 
 #trinotates format is a special form of torture
-#this is just the first 2000 lines of a trinotate file for us to play with
+#this is just the first 1000 lines of a trinotate file for us to play with
 
 #bring in trinotate file
 trinotate_example<-read.table('trinotate_example.txt', sep="\t", header=TRUE, row.names=NULL, quote="", na.strings=".",stringsAsFactors = F) 
@@ -244,7 +258,7 @@ colnames(table_annotation)
 ?DGEList
 #we are going to use edgeR to normalise so the options we are interested in are counts, genes and group
 #this command creates a dataset called a DGEList which is what edgeR uses for all its analyses - we will save things like the dispersion estimates etc back into this object as we go through the script
-y<-DGEList(counts = table_annotation[,6:30], genes = table_annotation[,1:5], group = grouping)
+y<-DGEList(counts = table_annotation[,5:29], genes = table_annotation[,1:4], group = grouping)
 summary(y)
 #it contains our raw counts:
 head(y$counts)
@@ -254,7 +268,7 @@ y$samples
 head(y$genes)
 
 #filtering
-#we want to remove genes that have sufficiently large counts for a statistical analysis
+#we want to remove genes that dont have sufficiently large counts for a statistical analysis
 #not only are these low genes not biologicaly relavent to us (you must have some gene expression to be of interest), but they also interfer with the statistics later on
 #there quite a few different ways to do this
 #one way is to use the inbuilt function in edgeR. This function uses the minimum group size in your samples (in this case 5) and then finds which rows have counts in at least that minumum number regardless of group. 
@@ -267,7 +281,7 @@ y <- y[keep, , keep.lib.sizes=FALSE]
 nrow(y$counts) #13414
 
 #another way to filter that doesnt involve the group size factor is to just use cpm 
-y2<-DGEList(counts = table_annotation[,6:30], genes = table_annotation[,1:5], group = grouping)
+y2<-DGEList(counts = table_annotation[,5:29], genes = table_annotation[,1:4], group = grouping)
 keep<-rowSums(cpm(y2)>1) >=2
 y2 <- y2[keep, , keep.lib.sizes=FALSE]
 nrow(y2$counts) #13175
@@ -320,7 +334,7 @@ model.matrix(~0+grouping*sex)
 #just renaming to make our model looks sensible
 colnames(design) <- levels(y$samples$group)
 rownames(design) <- colnames(y)
-#always sanity check that your design is correctt (i.e. the 1's and 0's make sense)
+#always sanity check that your design is correct (i.e. the 1's and 0's make sense)
 design
 
 #now we can estimate dispersion
@@ -358,10 +372,13 @@ summary(fit)
 ?glmQLFTest #glmQLFit uses this for the comparisons
 
 #to test for comprisons we need to tell edgeR what contrasts we want to make. There is three ways to do this. 
-
+#test the null hypothesis that time point x - time point y = 0
 #make contrasts method one
 #use makecontrasts function in edgeR
 ?makeContrasts
+
+#contrasts need to be based on models column names
+#draw time two time series on board
 my.contrasts <- makeContrasts(
   M3vsM2 = M3-M2,
   M4vsM2 = M4-M2,
@@ -407,8 +424,8 @@ design_2Mintercept<-model.matrix(~grouping)
 colnames(design_2Mintercept) <- levels(y$samples$group)
 rownames(design_2Mintercept) <- colnames(y)
 design_2Mintercept
-y <- estimateDisp(y, design_2Mintercept)
-fit2 <- glmFit(y, design_2Mintercept)
+y2 <- estimateDisp(y, design_2Mintercept)
+fit2 <- glmFit(y2, design_2Mintercept)
 
 M3vsM2_contrast3 <- glmLRT(fit2,coef=2)
 M3vsM2_contrast3_toptags <- data.frame(topTags(M3vsM2_contrast3,n=nrow(y$counts),sort="none"))
@@ -425,6 +442,7 @@ topTags(M3vsM2_contrast3)
 
 #use which ever is easist for you
 #note that with a set intercept you can still use the +/- formula to compare say 5M to 6M in this case it would be 1,0,0,0,1 - 1,0,0,1,0 = 0,0,0,-1,1
+design_2Mintercept
 M6vsM5_contrast2 <- glmLRT(fit2,contrast=c(0,0,0,-1,1))
 M6vsM5_contrast2_toptags <- data.frame(topTags(M6vsM5_contrast2,n=nrow(y$counts),sort="none"))
 head(M6vsM5_contrast2_toptags)
@@ -436,7 +454,7 @@ M6vsM5_contrast_toptags <- data.frame(topTags(M6vsM5_contrast,n=nrow(y$counts),s
 head(M6vsM5_contrast_toptags)
 M6vsM5_contrast_toptags %>% filter(FDR < 0.05) %>% nrow()
 
-#its just a glm so its endlessless flexible. Im not going to go into more complicated constrasts here but you can do basically whatever you want so if you want to compare the average of months 3-6 to 2 you can do that ~ you just end up with fractions in the contrasts rather than ones and zeros. If you want to compare anything against the control that is easy too 'coef=2:6'. There is a lot of exmaples in the edgeR manual-as always read the manual throughly.
+#its just a glm so its endlessless flexible. Im not going to go into more complicated constrasts here but you can do basically whatever you want so if you want to compare the average of months 3-6 to 2 you can do that ~ you just end up with fractions in the contrasts rather than ones and zeros. If you want to compare anything against the control that is easy too 'coef=2:6'. There is a lot of examples in the edgeR manual-as always read the manual throughly.
 
 ##################
 #building a table#
@@ -450,65 +468,73 @@ my.contrasts
 M3vsM2<-glmLRT(fit, contrast=my.contrasts[,"M3vsM2"])
 M3vsM2.toptags <- data.frame(topTags(M3vsM2,n=nrow(y$counts),sort="none"))
 head(M3vsM2.toptags)
-contrast_table<-M3vsM2.toptags[,c(1:6,10)]
+contrast_table<-M3vsM2.toptags[,c(1:5,9)]
 colnames(contrast_table)[colnames(contrast_table)=="logFC"] <- "M3vsM2_logFC"
 colnames(contrast_table)[colnames(contrast_table)=="FDR"] <- "M3vsM2_FDR"
 head(contrast_table)
 contrast_table %>% filter(M3vsM2_FDR < 0.05) %>% nrow()
 
+
 #M4vsM2
 M4vsM2<-glmLRT(fit, contrast=my.contrasts[,"M4vsM2"])
 M4vsM2.toptags <- data.frame(topTags(M4vsM2,n=nrow(y$counts),sort="none"))
-contrast_table$M4vsM2_logFC<-M4vsM2.toptags[,6]
-contrast_table$M4vsM2_FDR<-M4vsM2.toptags[,10]
+contrast_table$M4vsM2_logFC<-M4vsM2.toptags[,5]
+contrast_table$M4vsM2_FDR<-M4vsM2.toptags[,9]
 head(contrast_table)
 contrast_table %>% filter(M4vsM2_FDR < 0.05) %>% nrow()
 
 #M5vsM2
 M5vsM2<-glmLRT(fit, contrast=my.contrasts[,"M5vsM2"])
 M5vsM2.toptags <- data.frame(topTags(M5vsM2,n=nrow(y$counts),sort="none"))
-contrast_table$M5vsM2_logFC<-M5vsM2.toptags[,6]
-contrast_table$M5vsM2_FDR<-M5vsM2.toptags[,10]
+contrast_table$M5vsM2_logFC<-M5vsM2.toptags[,5]
+contrast_table$M5vsM2_FDR<-M5vsM2.toptags[,9]
 contrast_table %>% filter(M5vsM2_FDR < 0.05) %>% nrow()
 
 #M6vsM2
 M6vsM2<-glmLRT(fit, contrast=my.contrasts[,"M6vsM2"])
 M6vsM2.toptags <- data.frame(topTags(M6vsM2,n=nrow(y$counts),sort="none"))
-contrast_table$M6vsM2_logFC<-M6vsM2.toptags[,6]
-contrast_table$M6vsM2_FDR<-M6vsM2.toptags[,10]
+contrast_table$M6vsM2_logFC<-M6vsM2.toptags[,5]
+contrast_table$M6vsM2_FDR<-M6vsM2.toptags[,9]
 contrast_table %>% filter(M6vsM2_FDR < 0.05) %>% nrow()
 
 #M4vsM3
 M4vsM3<-glmLRT(fit, contrast=my.contrasts[,"M4vsM3"])
 M4vsM3.toptags <- data.frame(topTags(M4vsM3,n=nrow(y$counts),sort="none"))
-contrast_table$M4vsM3_logFC<-M4vsM3.toptags[,6]
-contrast_table$M4vsM3_FDR<-M4vsM3.toptags[,10]
+contrast_table$M4vsM3_logFC<-M4vsM3.toptags[,5]
+contrast_table$M4vsM3_FDR<-M4vsM3.toptags[,9]
 contrast_table %>% filter(M4vsM3_FDR < 0.05) %>% nrow()
 
 #M5vsM4
 M5vsM4<-glmLRT(fit, contrast=my.contrasts[,"M5vsM4"])
 M5vsM4.toptags <- data.frame(topTags(M5vsM4,n=nrow(y$counts),sort="none"))
-contrast_table$M5vsM4_logFC<-M5vsM4.toptags[,6]
-contrast_table$M5vsM4_FDR<-M5vsM4.toptags[,10]
+contrast_table$M5vsM4_logFC<-M5vsM4.toptags[,5]
+contrast_table$M5vsM4_FDR<-M5vsM4.toptags[,9]
 contrast_table %>% filter(M5vsM4_FDR < 0.05) %>% nrow()
 
 #M6vsM5
 M6vsM5<-glmLRT(fit, contrast=my.contrasts[,"M6vsM5"])
 M6vsM5.toptags <- data.frame(topTags(M6vsM5,n=nrow(y$counts),sort="none"))
-contrast_table$M6vsM5_logFC<-M6vsM5.toptags[,6]
-contrast_table$M6vsM5_FDR<-M6vsM5.toptags[,10]
+contrast_table$M6vsM5_logFC<-M6vsM5.toptags[,5]
+contrast_table$M6vsM5_FDR<-M6vsM5.toptags[,9]
 contrast_table %>% filter(M6vsM5_FDR < 0.05) %>% nrow()
 
 #hint R functions are good for repetative tasks
 
 #our final table:
 head(contrast_table)
+
+#how you analyse this data is ENTIRELY dependent on your question of interest
+#I have provided some examples of things you can do below. But this is NOT a comprehensive guide on all the things you can do with this data and definitly not what you should do with yours. 
+#think about your question and how best you can answer your question - only you can decide what that approach is. 
+#think about how you are going to display your data to your audience in an effective manner. Read quality papers on similar questions to yours
+
 #we need to do a couple of things and then we are good to go
 #one of the first things is often with time series data we are interested in any gene that is DE across the time series
-contrast_table$Lowest_FDR_from2M.TimeSeries<-apply(contrast_table[,c(7,9,11,13)],1,min)
-contrast_table$Lowest_FDR_serial.TimeSeries<-apply(contrast_table[,c(7,15,17,19)],1,min)
+contrast_table$Lowest_FDR_from2M.TimeSeries<-apply(contrast_table[,c(6,8,10,12)],1,min)
+contrast_table$Lowest_FDR_serial.TimeSeries<-apply(contrast_table[,c(6,14,16,18)],1,min)
 
 head(contrast_table)
+write.table(contrast_table,'Final_table_contrasts.txt',row.names=F,quote=F,sep='\t')
 
 #we have 4923 significant genes in our time series from 2M
 contrast_table %>% filter(Lowest_FDR_from2M.TimeSeries < 0.05) %>% nrow()
@@ -516,22 +542,22 @@ contrast_table %>% filter(Lowest_FDR_from2M.TimeSeries < 0.05) %>% nrow()
 contrast_table %>% filter(Lowest_FDR_serial.TimeSeries < 0.05) %>% nrow()
 
 #lets have a look at those genes in general 
-df <- contrast_table %>% filter(Lowest_FDR_from2M.TimeSeries < 0.05) %>% select(gene_id,M3vsM2_logFC,M4vsM2_logFC,M5vsM2_logFC,M6vsM2_logFC) %>% gather(., variable, value, -gene_id)
+df <- contrast_table %>% filter(Lowest_FDR_from2M.TimeSeries < 0.05) %>% dplyr::select(gene_id,M3vsM2_logFC,M4vsM2_logFC,M5vsM2_logFC,M6vsM2_logFC) %>% gather(., variable, value, -gene_id)
 head(df)
 ggplot(df, aes(variable, value,group = gene_id)) +
   geom_line()
 
-df <- contrast_table %>% filter(Lowest_FDR_serial.TimeSeries < 0.05) %>% select(gene_id,M3vsM2_logFC,M4vsM3_logFC,M5vsM4_logFC,M6vsM5_logFC) %>% gather(., variable, value, -gene_id)
+df <- contrast_table %>% filter(Lowest_FDR_serial.TimeSeries < 0.05) %>% dplyr::select(gene_id,M3vsM2_logFC,M4vsM3_logFC,M5vsM4_logFC,M6vsM5_logFC) %>% gather(., variable, value, -gene_id)
 ggplot(df, aes(variable, value,group = gene_id)) +
   geom_line()
 
 #maybe we have a time point we are particularily interested in
-df <- contrast_table %>% filter(M5vsM2_FDR < 0.05) %>% select(gene_id,M3vsM2_logFC,M4vsM2_logFC,M5vsM2_logFC,M6vsM2_logFC) %>% gather(., variable, value, -gene_id)
+df <- contrast_table %>% filter(M5vsM2_FDR < 0.05) %>% dplyr::select(gene_id,M3vsM2_logFC,M4vsM2_logFC,M5vsM2_logFC,M6vsM2_logFC) %>% gather(., variable, value, -gene_id)
 ggplot(df, aes(variable, value,group = gene_id)) +
   geom_line()
 
 #in general you can see because we have so much significant gene expression going on this is not a very useful way to look at this data
-#what would be cool would be to cluster the dataset into genes with similar trajectories through time so we can see in general what do the major trajectories look like
+#what would be cool would be to cluster the dataset into genes with similar trajectories through time so we can see in general what do the major gene trajectories look like
 
 #######################
 #heatmaps & clustering#
@@ -541,13 +567,155 @@ ggplot(df, aes(variable, value,group = gene_id)) +
 
 library(RColorBrewer)
 library(gplots)
-mat<-data.matrix(contrast_table %>% filter(Lowest_FDR_from2M.TimeSeries < 0.05) %>% select(M3vsM2_logFC,M4vsM2_logFC,M5vsM2_logFC,M6vsM2_logFC))
-heatmap.2(mat,col=brewer.pal(11,"BrBG"),trace="none",Colv=F,cexCol=0.5)
+mat<-data.matrix(contrast_table %>% filter(Lowest_FDR_from2M.TimeSeries < 0.05) %>% dplyr::select(M3vsM2_logFC,M4vsM2_logFC,M5vsM2_logFC,M6vsM2_logFC))
+heatmap.2(mat,col=brewer.pal(11,"BrBG"),trace="none",Colv=F,labRow=F,cexCol=0.5)
 
 #heatmaps can often look quite washed out when there is a large spread of fold changes one option is to chop them:
 mat[mat < -2] <- -2
 mat[mat > 2]  <-  2
 heatmap.2(mat,col=brewer.pal(11,"BrBG"),trace="none",Colv=F,labRow=F,margins=c(8,8),cexCol=1)
 
-#this easily allows us to see that half our genes are generally upregulated through the time series and half are down regulated. It also looks like there is more going on in the later months (stronger colours) than the earlier months (lighter colours)
+#this easily allows us to see that half our genes are generally upregulated through the time series and half are down regulated. It also looks like there is more going on in the later months (stronger colours) than the earlier months (lighter colours). But to really see this we need to look at the average trajectories of the genes.
 
+#we cluster genes into trajectories as we kind of assume a guilty by association correlation. That if they are doing similar things at similar times they are linked to one another in some manner
+
+#for this we are going to have a look at the R package WGCNA. This is not really what this package is designed to do. WGCNA is a designed to be run on the individual samples rather than the final fold changes ~which we are going to do here. Because of this Im not going to run everything you would normally run in WGCNA and you should obviously be reading a the tutorials so that for your dataset you run things in the most appropriate manner. 
+
+#there is now more appropriate tools for what we are about to do and if you want to do something similar I suggest you dont do it this way and use one of the more appropriate tools.
+#I was actually going to rewrite this for DP_DG_cluster https://github.com/PrincetonUniversity/DP_GP_cluster but I ran out of time so I've stolen some old code from back in the day before we had so many cool tools. Bascially here is an idea of an analysis you could do - but dont do it this way. 
+#https://lindsayrutter.github.io/bigPint/
+
+#in saying that the WGCNA package has a great set of tutorials which if you use it you should go through. But its not really designed for what we going to use it for. Its more about finding interesting clusters or modules within rather than trajectories across
+#https://horvath.genetics.ucla.edu/html/CoexpressionNetwork/Rpackages/WGCNA/
+
+#######
+#WGCNA#
+#######
+
+#there is an alternative to WGCNA called https://cemitool.sysbio.tools/analysis which has an online toolset as well as a R package 
+
+library(WGCNA)
+head(contrast_table)
+
+#WGCNA expects a transformed numeric matrix
+mat<-t(contrast_table %>% filter(Lowest_FDR_from2M.TimeSeries < 0.05) %>% select(gene_id,M3vsM2_logFC,M4vsM2_logFC,M5vsM2_logFC,M6vsM2_logFC))
+colnames(mat) <- mat[1,]
+mat <- mat[-1, ] 
+mat<-as.matrix(mat)
+class(mat) <- "numeric" 
+
+#WGCNA weighted correlation network analysis
+#here we are going to cluster genes into those with similar logfc trajectories we are going to run WGCNA without the 'W', i.e., no soft thresholding (this is very non-standard and is because I'm not running it 'properly' ~ normally you give it normalised expression values) 
+
+#first we need to build the adjacency matrix or correlation network of logfc between genes (if we were running this properly there is steps before hand to select the softpower threshold and control the noise)
+?adjacency
+softPower = 1;
+adjacency = adjacency(mat, power = softPower);
+# Turn adjacency into topological overlap matrix (measure of similarily) and calculate dissimilarity matrix (subtracts it from 1)
+TOM = TOMsimilarity(adjacency);
+dissTOM = 1-TOM
+
+# Call the hierarchical clustering function to cluster our genes
+geneTree = hclust(as.dist(dissTOM), method = "average");
+# Plot the resulting clustering tree (dendrogram)
+sizeGrWindow(12,9)
+plot(geneTree, xlab="", sub="", main = "Gene clustering on TOM-based dissimilarity",
+     labels = FALSE, hang = 0.04);
+
+#set the miimum number of genes to cluster into a module
+minModuleSize = 30;
+# Module identification using dynamic tree cut across our precious dendrogram
+dynamicMods = cutreeDynamic(dendro = geneTree, distM = dissTOM,
+                            deepSplit = 2, pamRespectsDendro = FALSE,
+                            minClusterSize = minModuleSize);
+table(dynamicMods)
+
+#label those clusters with a colour and visualise it beneath the dendrogram
+dynamicColors = labels2colors(dynamicMods)
+table(dynamicColors)
+
+# Plot the dendrogram and colors underneath
+sizeGrWindow(8,6)
+plotDendroAndColors(geneTree, dynamicColors, "Dynamic Tree Cut",
+                    dendroLabels = FALSE, hang = 0.03,
+                    addGuide = TRUE, guideHang = 0.05,
+                    main = "Gene dendrogram and module colors")
+
+# Calculate eigengenes
+MEList = moduleEigengenes(mat, colors = dynamicColors)
+MEs = MEList$eigengenes
+
+# Calculate dissimilarity of module eigengenes
+MEDiss = 1-cor(MEs);
+
+# Cluster module eigengenes
+METree = hclust(as.dist(MEDiss), method = "average");
+
+# Plot the result
+sizeGrWindow(7, 6)
+plot(METree, main = "Clustering of module eigengenes",
+     xlab = "", sub = "")
+
+MEDissThres = 0.25
+
+# Plot the cut line into the dendrogram
+abline(h=MEDissThres, col = "red")
+
+# Call an automatic merging function
+merge = mergeCloseModules(mat, dynamicColors, cutHeight = MEDissThres, verbose = 3)
+
+# The merged module colors
+mergedColors = merge$colors;
+mergedColors
+
+# Eigengenes of the new merged modules:
+mergedMEs = merge$newMEs;
+
+#seperate modules by those going up and down to plot both sides
+modNums<-length(unique(mergedColors))
+upGenes<-matrix(nrow=ncol(t(mat)),ncol=modNums)
+downGenes<-matrix(nrow=ncol(t(mat)),ncol=modNums)
+
+cn=1
+for (j in unique(mergedColors)) {
+  for (i in 1:ncol(t(mat))) {
+    submat<-t(mat)[mergedColors==j,i]
+    upGenes[i,cn]<-mean(submat[submat > 0])
+    downGenes[i,cn]<-mean(submat[submat < 0])
+  }
+  cn<-cn+1
+}
+
+colnames(upGenes)<-unique(mergedColors)
+colnames(downGenes)<-unique(mergedColors)
+upGenes
+downGenes
+
+#plot modules out - we are going to set 2M to zero for visualisation purpose
+plotTraj<-function(x,y,main) {
+  range<-c(min(y,na.rm=T),max(x,na.rm=T))
+  plot(2:6,c(0,x[1:4]),ylim=c(-1.1,1.2),col='black',type='l',main=main,las=1) #apple, alt version with set y limits
+  lines(2:6,c(0,(y[1:4])),col='black' )
+  lines(2:6,rep(0,5),lty=3)
+}
+
+upGenes
+downGenes
+
+#plot modules out
+for (i in 1:ncol(upGenes)) {
+    plotTraj(upGenes[,i],downGenes[,i],paste(colnames(upGenes)[i],"_n=",sum(mergedColors==colnames(upGenes)[i]),sep=""))
+}
+
+class(mergedColors)
+out<-as.data.frame(t(mat))
+head(out)
+out$module<-mergedColors
+head(out)
+write.table(out,"WGCNA_modules.txt",sep="\t",row.names=F,quote=F)
+
+BiocManager::install("gage")
+library(gage)
+gage
+
+#exon analysis
