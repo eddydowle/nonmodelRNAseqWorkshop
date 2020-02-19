@@ -6,9 +6,11 @@
 #you can view the library here:
 #https://bioconductor.org/packages/release/bioc/html/edgeR.html
 
+#I have no good reason for using edgeR over deseq2 other than its what I am used to. Each have there own strengths and weaknesses. If you were to run data through both (which I wouldnt do unless you were doing some sort of comparison papers) you will get very similar results. There will be some slight differences as they are slightly different. 
+
 #this is meant to be an introduction to differential expression. Dont get caught up in the R code. If you dont understand the code just run it put a comment above it to note it and try to focus on the point of what we are doing rather than the code itself. We wont have time this afternoon to go through the in's and out's of the code itself, so please focus on the broader picture. You can come back later on in your own time and work through any code bits that trouble you (google is your best friend for this). 
 
-#disclaimer: this is not a comprehensive differential expression analysis that you can push your data through. This is just an introduction. You are expected to read the manuals and go through the examples there yourself. I have cut some big corners in this code, simply to save time for this practical season - it is therefore not suitable to be used in a black box manner (and you should not do your statistical analysis in a black box manner ~ regardless of what you are doing). 
+#disclaimer: this is not a comprehensive differential expression analysis that you can push your data through. This is just an introduction. You are expected to read the manuals and go through the examples yourself. I have cut some big corners in this code, simply to save time for this practical season - it is therefore not suitable to be used in a black box manner (and you should not do your statistical analysis in a black box manner ~ regardless of what you are doing). 
 
 #to install bioconductor packages:
 #if (!requireNamespace("BiocManager", quietly = TRUE))
@@ -20,7 +22,7 @@ library(edgeR)
 library(tidyverse)
 
 #we are going to be looking at a time series of data across 5 months
-
+#draw trajectories etc on board
 #setwd to whereever you have put the data
 setwd("~/Documents/AdminStuff/Otago/Teaching/RNAseq/data/")
 
@@ -49,7 +51,7 @@ setwd("~/Documents/AdminStuff/Otago/Teaching/RNAseq/data/")
 #im going to show you three ways as getting data in often seems to be an issue
 
 #you can also just do this yourself by looping through the files:
-file_list<-list.files(pattern='*genes.results')
+file_list<-list.files(pattern='*genes.results.cut')
 file_list
 #have a look at one of those files
 tmp <- read.table(file_list[1], header =TRUE)
@@ -59,7 +61,7 @@ head(tmp)
 table<-c()
 library(stringr)
 for (file in file_list){
-  sampleID<-str_match(file,"(^[A-Za-z0-9]*_[A-Za-z0-9]*_[A-Za-z0-9]*_[0-9]*)")[,1] #grab sample name
+  sampleID<-str_match(file,"(^[A-Za-z0-9]*_[A-Za-z0-9]*_[0-9]*)")[,1] #grab sample name
   print(sampleID)
   df<-read.table(file,header=T,sep="\t",row.names=NULL,stringsAsFactors = F) #bring in file at a time
   df2<-df[,c(1,5)] #get columns we want
@@ -77,13 +79,13 @@ head(table)
 #BiocManager::install("tximport")
 
 library(tximport)
-file_list<-list.files(pattern='*genes.results')
+file_list<-list.files(pattern='*genes.results.cut')
 file_list
 #lets have a look at one of those files
 tmp <- read.table(file_list[1], header =TRUE)
 head(tmp)
 #getting out sample names out of the file names and assigning them to our dataset
-sampleID<-str_match(file_list,"(^[A-Za-z0-9]*_[A-Za-z0-9]*_[A-Za-z0-9]*_[0-9]*)")[,1]
+sampleID<-str_match(file_list,"(^[A-Za-z0-9]*_[A-Za-z0-9]*_[0-9]*)")[,1]
 sampleID
 names(file_list) <- sampleID
 #importing using tximport here we specify the program we used to generate the counts (in this case rsem) but tximport can deal with salmon/kallisto and others
@@ -93,6 +95,7 @@ summary(txi) #creates a list
 head(txi$counts)
 
 #another option is to use trinity's abundance_estimates_to_matrix perl script
+#https://github.com/trinityrnaseq/trinityrnaseq/wiki/Trinity-Transcript-Quantification#counting-expressed-genes
 #its a perl script so we are just going to run it and it will output a couple of files to our working directory
 x <- 'perl abundance_estimates_to_matrix.pl'
 system(x)
@@ -101,7 +104,7 @@ system(x)
 #this trinity script is going to output a matrix here its going to call it isoform ~ its not its gene level but its because we didnt give it a gene_trans_map file
 #if you did a trinity assembly and wanted to collapse to 'trinity genes' just change --gene_trans_map none to --gene_trans_map Trinity.fasta.gene_trans_map and it will output one to the transcript level and one matrix to the 'trinity gene' level 
 counts<-read.table('rsem.isoform.counts.matrix',header=T,row.names=NULL,sep='\t')
-x<-str_match(colnames(counts),"(^[A-Za-z0-9]*_[A-Za-z0-9]*_[A-Za-z0-9]*_[0-9]*)")[,1]
+x<-str_match(colnames(counts),"(^[A-Za-z0-9]*_[A-Za-z0-9]*_[0-9]*)")[,1]
 x[1]<-'gene_id'
 colnames(counts)<-x
 
@@ -148,6 +151,15 @@ listAttributes(ENSEMBL_Dm)
 annotations_with_Dm <- read.table('annotations_with_Dm',row.names=NULL,header=T,sep='\t')
 head(annotations_with_Dm)
 
+#the other option is if you have a true model species like drosophila you can download a annotation package specifically for that species 
+#http://bioconductor.org/packages/3.10/data/annotation/
+#in this case (because I didnt send this one out on friday)
+#BiocManager::install("org.Dm.eg.db")
+library(org.Dm.eg.db)
+#then you can see the keytypes that you are allowed here:
+keytypes(org.Dm.eg.db)
+#these annotation packages plug into a lot of other packages and you will this later on in GSEA 
+
 #the other way you can do this is download the file yourself 
 #in some ways this is safer because the genome version for model species update and this will keep your files inline with the version of the genome you annotated too
 #for instance to flybase you can download the conversion file here:
@@ -168,6 +180,7 @@ head(flybase_cn)
 
 flybase<-left_join(flybase_gn,flybase_cn,by=c('FlyBase_FBgn' = 'primary_FBgn'))
 head(flybase)
+head(pom_annotation)
 pom_annotation_full<-left_join(pom_annotation,flybase,by=c('Flybase_blast'='FlyBase_FBpp'))
 head(pom_annotation_full)
 
@@ -278,13 +291,15 @@ keep <- filterByExpr(y)
 nrow(y$counts)
 y <- y[keep, , keep.lib.sizes=FALSE]
 #post-filtering we have
-nrow(y$counts) #13414
+nrow(y$counts) #8220
 
 #another way to filter that doesnt involve the group size factor is to just use cpm 
 y2<-DGEList(counts = table_annotation[,5:29], genes = table_annotation[,1:4], group = grouping)
 keep<-rowSums(cpm(y2)>1) >=2
 y2 <- y2[keep, , keep.lib.sizes=FALSE]
-nrow(y2$counts) #13175
+nrow(y2$counts) #8801 ~it is not consistent which method is more/less strict
+
+#Im pretty sure deseq2 does filtering more eloquently than edgeR
 
 #normalising
 #to normalise by library size we use edgeR's calcNormFactor - here we are just going to stick with the default TMM method
@@ -306,7 +321,7 @@ plotMDS(y)
 cols=c('#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00')
 shps = c(15, 16, 17,18,19)
 plotMDS(y, col = cols[as.factor(grouping)], pch = shps[as.factor(grouping)])
-legend('topleft', col=cols, legend=levels(as.factor(grouping)), pch = shps, cex = 0.7)
+legend('topright', col=cols, legend=levels(as.factor(grouping)), pch = shps, cex = 0.7)
 
 #or you can just save our the co-ordinates and plot in your preferred plotting software
 mds_plot<-plotMDS(y)
@@ -338,15 +353,21 @@ rownames(design) <- colnames(y)
 design
 
 #now we can estimate dispersion
-#I mentioned earlier edgeR has three calculations for this, the function estimateDisp will do all three in one go
+#I mentioned earlier edgeR has several different calculations for this, the function estimateDisp will do the main three in one go
 ?estimateDisp
 y <- estimateDisp(y, design)
 y$common.dispersion
 #the squareroot of the common dispersion gives the coefficient of biological variation
-sqrt(0.066) #0.26
+sqrt(0.069) #0.26
 #which we can see if we plot the dispersion out using the plotBCV function in edgeR
 plotBCV(y)
 #you can see we have higher dispersion at our lower counts and then it dwindles down at the higher counts ~this is pretty normal
+
+#there is more than three types of dispersion calculations in edgeR
+#there is one specifically designed to be more robust to outliers:
+?estimateGLMRobustDisp
+#https://academic.oup.com/nar/article/42/11/e91/1427925
+#we going to stick to standard as robust takes a while to run, note that adding the flag robust=TRUE in estimateDisp is not the same as running estiamteGLMRobustDisp (also robust=TRUE in estimateDisp has no effect on the trended dispersion estimates that the QLglm uses (and the QL model cannot take the estimates from estimateGLMRobustDisp ~it has its own dispersion))
 
 ################
 #glm's in edgeR#
@@ -370,6 +391,10 @@ summary(fit)
 #which we then need to use to test for our various comparisons
 ?glmLRT
 ?glmQLFTest #glmQLFit uses this for the comparisons
+
+#note that for exon analysis in edgeR there is an entirely different function called (one nice thing about edgeR is that exon analysis is inbuilt while otherwise you have to use DEXSEQ)
+?diffSpliceDGE
+#this is run of the glmLRT fit
 
 #to test for comprisons we need to tell edgeR what contrasts we want to make. There is three ways to do this. 
 #test the null hypothesis that time point x - time point y = 0
@@ -528,6 +553,8 @@ head(contrast_table)
 #think about your question and how best you can answer your question - only you can decide what that approach is. 
 #think about how you are going to display your data to your audience in an effective manner. Read quality papers on similar questions to yours
 
+#in this dataset Im interested in DE across the time series. I want to know what most DE genes are doing in terms of trajectories and what some of the main clusters of genes involved are. I also have specific pathways that I know from reading the litreture are important to stage of development in insects.  
+
 #we need to do a couple of things and then we are good to go
 #one of the first things is often with time series data we are interested in any gene that is DE across the time series
 contrast_table$Lowest_FDR_from2M.TimeSeries<-apply(contrast_table[,c(6,8,10,12)],1,min)
@@ -538,7 +565,7 @@ write.table(contrast_table,'Final_table_contrasts.txt',row.names=F,quote=F,sep='
 
 #we have 4923 significant genes in our time series from 2M
 contrast_table %>% filter(Lowest_FDR_from2M.TimeSeries < 0.05) %>% nrow()
-#we have 2028 significant genes in our serial time series
+#we have 1832 significant genes in our serial time series
 contrast_table %>% filter(Lowest_FDR_serial.TimeSeries < 0.05) %>% nrow()
 
 #lets have a look at those genes in general 
@@ -551,23 +578,88 @@ df <- contrast_table %>% filter(Lowest_FDR_serial.TimeSeries < 0.05) %>% dplyr::
 ggplot(df, aes(variable, value,group = gene_id)) +
   geom_line()
 
+#that's a lot of genes...
+#maybe we have a pathway that we are focused on (here wnt because I know from the litreture that this an important pathway in insect development). You can often use tools like flybase to pull out genes from pathways of interest http://flybase.org/cgi-bin/cvreport.pl?id=GO%3A0016055
+df<-contrast_table %>% filter(gene_symbol=='Apc'|gene_symbol=='fz2'|gene_symbol=='nkd'|gene_symbol=='osa'|gene_symbol=='spen'|gene_symbol=='Galphao'|gene_symbol=='nej') %>% filter(Lowest_FDR_from2M.TimeSeries <0.05) %>% dplyr::select(gene_symbol,M3vsM2_logFC,M4vsM2_logFC,M5vsM2_logFC,M6vsM2_logFC)
+#just setting to zero to make it look nicer
+df$M2_logFC<-0
+colnames(df)
+colnames(df)<-c('gene_symbol','3M','4M','5M','6M','2M')
+#a couple of duplicated genes
+df<-df %>% group_by(gene_symbol) %>% summarize_all(mean)
+df<-df %>% gather(., variable, value, -gene_symbol)
+
+ggplot(df, aes(variable, value,group = gene_symbol,colour=gene_symbol)) +
+  geom_line(size=2) +
+  theme_bw() +
+  xlab('Month') +
+  ylab('LogFC')
+
+
+#maybe we want to know at what time point most things are happening
+sig3Mv2M<-contrast_table %>% filter(M3vsM2_FDR < 0.05) %>% nrow() 
+sig4Mv2M<-contrast_table %>% filter(M4vsM2_FDR < 0.05) %>% nrow() 
+sig5Mv2M<-contrast_table %>% filter(M5vsM2_FDR < 0.05) %>% nrow() 
+sig6Mv2M<-contrast_table %>% filter(M6vsM2_FDR < 0.05) %>% nrow() 
+
+time_series_DE<-cbind.data.frame(c(sig3Mv2M,sig4Mv2M,sig5Mv2M,sig6Mv2M),c('sig3Mv2M','sig4Mv2M','sig5Mv2M','sig6Mv2M'))
+colnames(time_series_DE)<-c('Genes_DE',"Month")
+time_series_DE$Genes_DE<-as.numeric(as.character(time_series_DE$Genes_DE))
+time_series_DE
+ggplot(time_series_DE, aes(Month, Genes_DE)) +
+  geom_bar(stat = "identity",col='blue',fill='blue') +
+  theme_bw()
+
 #maybe we have a time point we are particularily interested in
 df <- contrast_table %>% filter(M5vsM2_FDR < 0.05) %>% dplyr::select(gene_id,M3vsM2_logFC,M4vsM2_logFC,M5vsM2_logFC,M6vsM2_logFC) %>% gather(., variable, value, -gene_id)
 ggplot(df, aes(variable, value,group = gene_id)) +
   geom_line()
 
-#in general you can see because we have so much significant gene expression going on this is not a very useful way to look at this data
-#what would be cool would be to cluster the dataset into genes with similar trajectories through time so we can see in general what do the major gene trajectories look like
+#we can also do an over representation enrichment analysis on this month (at the end of this code I have a GSEA for this month too)
+df<-contrast_table %>% filter(M5vsM2_FDR < 0.05) %>% dplyr::select(FlyBase_FBgn) %>% na.omit() %>% unique()
+head(df)
+write.table(df,'Flybase_gnIDS_sig5M.txt',row.names=F,quote=F)
+#go into david https://david.ncifcrf.gov/
+
+#DAVID overrepresentation analysis
+#Im a bit old school and for most of my over representation analysis I just use DAVID
+#https://david.ncifcrf.gov/
+# you can run it through R, personally I prefer the online wiki
+
+#then draw out enrichment cluster
+
+
+#if we decide we are interested in some of the enriched genes
+#here I have choosen riboproteins which are heavily enriched at 5M potentially providing evidence of active translation and there for cell cycling/development at 5M
+ribos<-read.table('Riboproteins.txt',header=T,sep='\t',row.names=NULL)
+head(ribos)
+df<-contrast_table %>% subset(FlyBase_FBgn %in% ribos$ID) %>% filter(Lowest_FDR_from2M.TimeSeries <0.05) %>% dplyr::select(gene_id,M3vsM2_logFC,M4vsM2_logFC,M5vsM2_logFC,M6vsM2_logFC) 
+df$M2_logFC<-0
+colnames(df)
+colnames(df)<-c('gene_id','3M','4M','5M','6M','2M')
+df<-df %>% gather(., variable, value, -gene_id)
+
+ggplot(df, aes(variable, value,group = gene_id)) +
+  geom_line(col='navy') +
+  theme_bw()+
+  xlab('Month')+
+  ylab('LogFC')
+
+#you can generate enrichmaps etc of a david analysis with cytoscape https://cytoscape.org/
 
 #######################
 #heatmaps & clustering#
 #######################
+
+#in general you can see because we have so much significant gene expression going on this is not a very useful way to look at this data
+#what would be cool would be to cluster the dataset into genes with similar trajectories through time so we can see in general what do the major gene trajectories look like and then perhaps look at what is enriched along those trajectories
 
 #heatmaps are often a good way to visualise gene expresion changes through a time series
 
 library(RColorBrewer)
 library(gplots)
 mat<-data.matrix(contrast_table %>% filter(Lowest_FDR_from2M.TimeSeries < 0.05) %>% dplyr::select(M3vsM2_logFC,M4vsM2_logFC,M5vsM2_logFC,M6vsM2_logFC))
+head(mat)
 heatmap.2(mat,col=brewer.pal(11,"BrBG"),trace="none",Colv=F,labRow=F,cexCol=0.5)
 
 #heatmaps can often look quite washed out when there is a large spread of fold changes one option is to chop them:
@@ -579,143 +671,160 @@ heatmap.2(mat,col=brewer.pal(11,"BrBG"),trace="none",Colv=F,labRow=F,margins=c(8
 
 #we cluster genes into trajectories as we kind of assume a guilty by association correlation. That if they are doing similar things at similar times they are linked to one another in some manner
 
-#for this we are going to have a look at the R package WGCNA. This is not really what this package is designed to do. WGCNA is a designed to be run on the individual samples rather than the final fold changes ~which we are going to do here. Because of this Im not going to run everything you would normally run in WGCNA and you should obviously be reading a the tutorials so that for your dataset you run things in the most appropriate manner. 
+#im going to do this with a new program for me. The first I have run for you as its takes ~1 hours to run. Its a tool called DP_DG_cluster https://github.com/PrincetonUniversity/DP_GP_cluster I usually use WCGNA but this program is a bit more intuitive. WCGNA is a great package for network/clustering analysis as well and has some good online tutorials to look at ~but it is somewhat less user friendly than this tool (if you are clustering logfc (not the reccomended way to use it) with WCGNA you will want to switch of the soft threshold and just use it to cluster). One benefit of WGCNA is that it will ignore sign ~which I havent figured out if DP_DG_cluster can. 
 
-#there is now more appropriate tools for what we are about to do and if you want to do something similar I suggest you dont do it this way and use one of the more appropriate tools.
-#I was actually going to rewrite this for DP_DG_cluster https://github.com/PrincetonUniversity/DP_GP_cluster but I ran out of time so I've stolen some old code from back in the day before we had so many cool tools. Bascially here is an idea of an analysis you could do - but dont do it this way. 
-#https://lindsayrutter.github.io/bigPint/
+#as DP_GP_cluster takes so long to run as is a python tool I have run it for you saved the results
+contrasts_sig2M<-contrast_table %>% filter(Lowest_FDR_from2M.TimeSeries < 0.05) %>% dplyr::select(gene_id,M3vsM2_logFC,M4vsM2_logFC,M5vsM2_logFC,M6vsM2_logFC) %>% mutate(M3vsM2_logFC=abs(M3vsM2_logFC),M4vsM2_logFC=abs(M4vsM2_logFC),M5vsM2_logFC=abs(M5vsM2_logFC),M6vsM2_logFC=abs(M6vsM2_logFC))
+write.table(contrasts_sig2M,'Back2Mflies_sig.txt',row.names=F,quote=F,sep='\t')
 
-#in saying that the WGCNA package has a great set of tutorials which if you use it you should go through. But its not really designed for what we going to use it for. Its more about finding interesting clusters or modules within rather than trajectories across
-#https://horvath.genetics.ucla.edu/html/CoexpressionNetwork/Rpackages/WGCNA/
+#python2 DP_GP_cluster.py -o flies_default.txt -i Back2Mflies_sig.txt -p png -n 20 --plot
 
-#######
-#WGCNA#
-#######
+#where the input file is: 
+#gene_id	M3vsM2_logFC	M4vsM2_logFC	M5vsM2_logFC	M6vsM2_logFC
+#gene5831	-0.823333668	-1.944856716	-2.786116506	-2.167431941
+#gene15251	-0.782809565	-0.99233326	-1.498730136	-0.669572398
+#gene8328	0.568978495	0.857865413	0.8296765	1.288707649
+#gene19561	0.723002385	1.043120385	1.483424463	1.833282681
+#gene28027	0.38919299	0.872696218	1.201096646	1.336030316
+#gene253	0.81445207	1.364742421	1.526957083	2.145085979
 
-#there is an alternative to WGCNA called https://cemitool.sysbio.tools/analysis which has an online toolset as well as a R package 
+#it outputs a bunch of graphs and a file with the optimal clustering groups by gene:
+#in this example I havent had time to quite get the clustering as I would like so there is clusters that are seperate that I would have put together. This is just a matter of playing with the software settings (which I havent had time to do)
+#one thing im interested in is within those clusters what sort of enrichment do we see? Assuming we have guilty by association going on
 
-library(WGCNA)
-head(contrast_table)
+DP_GP_clusters<-read.table('DP_DG/default_flies_sig_optimal_clustering.txt',header=T,stringsAsFactors = F,sep='\t')
+head(DP_GP_clusters)
+DP_GP_clusters<-left_join(DP_GP_clusters,contrast_table,by=c('gene'='gene_id')) %>% dplyr::select(gene,FlyBase_FBgn,cluster,M3vsM2_logFC,M4vsM2_logFC,M5vsM2_logFC,M6vsM2_logFC) 
+head(DP_GP_clusters)
+cluster_count<-DP_GP_clusters %>% count(cluster)
+view(cluster_count)
+DP_GP_clusters %>% filter(cluster==3) %>% dplyr::select(FlyBase_FBgn) %>% na.omit() %>% print(., row.names = FALSE)
+DP_GP_clusters %>% filter(cluster==1) %>% dplyr::select(FlyBase_FBgn) %>% na.omit() %>% print(., row.names = FALSE)
 
-#WGCNA expects a transformed numeric matrix
-mat<-t(contrast_table %>% filter(Lowest_FDR_from2M.TimeSeries < 0.05) %>% select(gene_id,M3vsM2_logFC,M4vsM2_logFC,M5vsM2_logFC,M6vsM2_logFC))
-colnames(mat) <- mat[1,]
-mat <- mat[-1, ] 
-mat<-as.matrix(mat)
-class(mat) <- "numeric" 
+df <- DP_GP_clusters %>% filter(cluster==3) %>% dplyr::select(gene,M3vsM2_logFC,M4vsM2_logFC,M5vsM2_logFC,M6vsM2_logFC) %>% gather(., variable, value, -gene)
+ggplot(df, aes(variable, value,group = gene)) +
+  geom_line()
 
-#WGCNA weighted correlation network analysis
-#here we are going to cluster genes into those with similar logfc trajectories we are going to run WGCNA without the 'W', i.e., no soft thresholding (this is very non-standard and is because I'm not running it 'properly' ~ normally you give it normalised expression values) 
 
-#first we need to build the adjacency matrix or correlation network of logfc between genes (if we were running this properly there is steps before hand to select the softpower threshold and control the noise)
-?adjacency
-softPower = 1;
-adjacency = adjacency(mat, power = softPower);
-# Turn adjacency into topological overlap matrix (measure of similarily) and calculate dissimilarity matrix (subtracts it from 1)
-TOM = TOMsimilarity(adjacency);
-dissTOM = 1-TOM
+#Seen as DP_GP_clusters ignores sign you can draw out the two trajectories from the mean of the clusters
+#a lot of our clusters have a very low count lets remove those for this section (they cause problems in the code)
+cluster_count_over20<-cluster_count %>% filter(n> 20)
+DP_GP_clusters_over20<-DP_GP_clusters %>% subset(cluster %in% cluster_count_over20$cluster)
+modNums<-length(unique(DP_GP_clusters_over20$cluster))
 
-# Call the hierarchical clustering function to cluster our genes
-geneTree = hclust(as.dist(dissTOM), method = "average");
-# Plot the resulting clustering tree (dendrogram)
-sizeGrWindow(12,9)
-plot(geneTree, xlab="", sub="", main = "Gene clustering on TOM-based dissimilarity",
-     labels = FALSE, hang = 0.04);
+#create a matrix
+mat<-DP_GP_clusters_over20 %>% dplyr::select(gene,FlyBase_FBgn,M3vsM2_logFC,M4vsM2_logFC,M5vsM2_logFC,M6vsM2_logFC)
+head(mat)
+mat2 <- mat[,c(-1,-2)] 
+mat2<-as.matrix(mat2)
+class(mat2) <- "numeric" 
+head(mat2)
 
-#set the miimum number of genes to cluster into a module
-minModuleSize = 30;
-# Module identification using dynamic tree cut across our precious dendrogram
-dynamicMods = cutreeDynamic(dendro = geneTree, distM = dissTOM,
-                            deepSplit = 2, pamRespectsDendro = FALSE,
-                            minClusterSize = minModuleSize);
-table(dynamicMods)
+#create a matrix where we are going to store our average fold changes that are positive and negative for each cluster
+upGenes<-matrix(nrow=ncol(mat2),ncol=modNums)
+downGenes<-matrix(nrow=ncol(mat2),ncol=modNums)
 
-#label those clusters with a colour and visualise it beneath the dendrogram
-dynamicColors = labels2colors(dynamicMods)
-table(dynamicColors)
-
-# Plot the dendrogram and colors underneath
-sizeGrWindow(8,6)
-plotDendroAndColors(geneTree, dynamicColors, "Dynamic Tree Cut",
-                    dendroLabels = FALSE, hang = 0.03,
-                    addGuide = TRUE, guideHang = 0.05,
-                    main = "Gene dendrogram and module colors")
-
-# Calculate eigengenes
-MEList = moduleEigengenes(mat, colors = dynamicColors)
-MEs = MEList$eigengenes
-
-# Calculate dissimilarity of module eigengenes
-MEDiss = 1-cor(MEs);
-
-# Cluster module eigengenes
-METree = hclust(as.dist(MEDiss), method = "average");
-
-# Plot the result
-sizeGrWindow(7, 6)
-plot(METree, main = "Clustering of module eigengenes",
-     xlab = "", sub = "")
-
-MEDissThres = 0.25
-
-# Plot the cut line into the dendrogram
-abline(h=MEDissThres, col = "red")
-
-# Call an automatic merging function
-merge = mergeCloseModules(mat, dynamicColors, cutHeight = MEDissThres, verbose = 3)
-
-# The merged module colors
-mergedColors = merge$colors;
-mergedColors
-
-# Eigengenes of the new merged modules:
-mergedMEs = merge$newMEs;
-
-#seperate modules by those going up and down to plot both sides
-modNums<-length(unique(mergedColors))
-upGenes<-matrix(nrow=ncol(t(mat)),ncol=modNums)
-downGenes<-matrix(nrow=ncol(t(mat)),ncol=modNums)
-
+#Calculate the mean positive and mean negative foldchanges at each month for each cluster 
 cn=1
-for (j in unique(mergedColors)) {
-  for (i in 1:ncol(t(mat))) {
-    submat<-t(mat)[mergedColors==j,i]
+for (j in unique(DP_GP_clusters_over20$cluster)) {
+  for (i in 1:ncol(mat2)) {
+    submat<-mat2[DP_GP_clusters_over20$cluster==j,i]
     upGenes[i,cn]<-mean(submat[submat > 0])
     downGenes[i,cn]<-mean(submat[submat < 0])
   }
   cn<-cn+1
 }
 
-colnames(upGenes)<-unique(mergedColors)
-colnames(downGenes)<-unique(mergedColors)
+#assign our colnames as our cluster names
+colnames(upGenes)<-unique(DP_GP_clusters_over20$cluster)
+colnames(downGenes)<-unique(DP_GP_clusters_over20$cluster)
 upGenes
 downGenes
 
-#plot modules out - we are going to set 2M to zero for visualisation purpose
+#we are going to plot them out in one go so Im just building a plotting function to do that  ~ it will plot the up and down foldchanges within each module
 plotTraj<-function(x,y,main) {
   range<-c(min(y,na.rm=T),max(x,na.rm=T))
-  plot(2:6,c(0,x[1:4]),ylim=c(-1.1,1.2),col='black',type='l',main=main,las=1) #apple, alt version with set y limits
-  lines(2:6,c(0,(y[1:4])),col='black' )
+  plot(2:6,c(0,x[1:4]),ylim=c(-1.1,1.2),col='black',type='l',xlab='Month',ylab='LogFC',main=main,las=1,lwd=2) #apple, alt version with set y limits
+  lines(2:6,c(0,(y[1:4])),col='black',lwd=2 )
   lines(2:6,rep(0,5),lty=3)
 }
 
 upGenes
 downGenes
 
-#plot modules out
+#plot modules out and set the header so that it prints the number of genes in each module
 for (i in 1:ncol(upGenes)) {
-    plotTraj(upGenes[,i],downGenes[,i],paste(colnames(upGenes)[i],"_n=",sum(mergedColors==colnames(upGenes)[i]),sep=""))
+  plotTraj(upGenes[,i],downGenes[,i],paste(colnames(upGenes)[i]," n=",sum(DP_GP_clusters_over20$cluster==colnames(upGenes)[i]),sep=""))
 }
 
-class(mergedColors)
-out<-as.data.frame(t(mat))
-head(out)
-out$module<-mergedColors
-head(out)
-write.table(out,"WGCNA_modules.txt",sep="\t",row.names=F,quote=F)
 
-BiocManager::install("gage")
-library(gage)
-gage
+####################
+########GSEA########
+####################
 
-#exon analysis
+#so over representation analysis obviously requires us to cut our data at some point and that somewhat arbitary and unhelpful
+#GSEA doesnt have this requirement it just takes ranked data
+#I gave you the wrong package on friday it should have been 'clusterprofiler'
+
+BiocManager::install("clusterProfiler")
+library(clusterProfiler)
+
+#we are going to use that annnotation package I mentioned at the begining as it plugs into clusterprofiler
+library(org.Dm.eg.db)
+#ogranism<-'org.Dm.eg.db'
+#here we are going to rank it based on fold change and then we are going to sort the list
+original_gene_list <- contrast_table$M5vsM2_logFC
+names(original_gene_list) <- contrast_table$FlyBase_FBgn
+original_gene_list <- original_gene_list[!is.na(names(original_gene_list))]
+gene_list = sort(original_gene_list, decreasing = TRUE)
+head(gene_list)
+
+#have a look at what keytypes we are allowed for drosophila annotations (we have flybase)
+keytypes(org.Dm.eg.db)
+organism<-'org.Dm.eg.db'
+#here im just doing a GO gse you can do others
+?gseGO
+gse <- gseGO(geneList=gene_list, 
+             ont ="BP", 
+             keyType = "FLYBASE", 
+             pvalueCutoff = 0.05, 
+             OrgDb = organism,
+             pAdjustMethod = "none") 
+
+#The first warning produced just says that there are few genes that have the same fold change and so are ranked equally. Those genes are ranked randomly amongst each other-this is fine as long as its a small number. 
+#it will throw a warning about duplicate genes, dont worry about it its just dealt with them here 
+#creates a big object
+
+#and we can draw that out in various ways
+#here you can see the up and down enriched terms there significance etc
+dotplot(gse, showCategory=10, split=".sign") + facet_grid(.~.sign)
+#connections between categories (i.e. development is connected to devleopment)
+emapplot(gse, showCategory = 10)
+#rnaseq plotting annoys me because just because you can draw something does not make it useful:
+cnetplot(gse, categorySize="p.adjust", foldChange=gene_list, showCategory = 3)
+ridgeplot(gse) + labs(x = "enrichment distribution")
+gseaplot(gse, by = "all", title = gse$Description[1], geneSetID = 1)
+
+###################
+#networks/hubgenes#
+###################
+
+#i've ran out of time so I havent had time to code some examples up
+#for networks there is a few plug and play software you may find interesting
+#https://string-db.org/
+#https://cytoscape.org/
+#https://cemitool.sysbio.tools/
+
+#and of course you can do it in R (this is not an exhaustive list)
+#igraph - for drawing networks in R
+#WGCNA and coexnet for contructing links/networks
+
+#there is plenty of examples online. These tools can be great for exploring data, just remember when it comes time to draw out figures ask yourself what are you trying to show your reader. 
+
+#other software
+#nice venn diagrams
+#http://degradome.uniovi.es/cgi-bin/nVenn/nvenn.cgi
+
+
+#might be useful for data exploration but very black box
+#http://bioinformatics.sdstate.edu/idep/
